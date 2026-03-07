@@ -1,0 +1,6 @@
+root: .
+build: go build -o ./bin/server .
+exec: ./bin/server
+ignore:
+  - .git
+  - node_modules

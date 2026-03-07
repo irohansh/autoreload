@@ -4,6 +4,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -11,26 +13,35 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-const debounceDelay = 250 * time.Millisecond
+const (
+	debounceDelay   = 400 * time.Millisecond
+	burstThreshold  = 20
+	burstWindow     = 1 * time.Second
+)
 
 var (
-	ignoreDirs = []string{".git", "node_modules", "vendor", "bin", "dist", "build"}
+	ignoreDirs = []string{".git", "node_modules", "vendor", "bin", "dist", "build", ".vscode", ".idea"}
 	ignoreSuffixes = []string{".tmp", ".swp", ".~", ".bak"}
 )
 
 type Watcher struct {
-	root     string
-	logger   *slog.Logger
-	watcher  *fsnotify.Watcher
-	changes  chan struct{}
-	mu       sync.Mutex
-	debounce *time.Timer
-	done     chan struct{}
-	wg       sync.WaitGroup
-	closed   bool
+	root             string
+	logger           *slog.Logger
+	watcher          *fsnotify.Watcher
+	changes          chan string
+	lastPath         string
+	extraIgnoreDirs  []string
+	mu               sync.Mutex
+	debounce         *time.Timer
+	burstCount       int
+	burstPending     bool
+	burstWindowTimer *time.Timer
+	done             chan struct{}
+	wg               sync.WaitGroup
+	closed           bool
 }
 
-func New(root string, logger *slog.Logger) (*Watcher, error) {
+func New(root string, logger *slog.Logger, extraIgnoreDirs []string) (*Watcher, error) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
@@ -50,39 +61,50 @@ func New(root string, logger *slog.Logger) (*Watcher, error) {
 	}
 
 	w := &Watcher{
-		root:    absRoot,
-		logger:  logger,
-		watcher: fsw,
-		changes: make(chan struct{}, 1),
-		done:    make(chan struct{}),
+		root:            absRoot,
+		logger:          logger,
+		watcher:         fsw,
+		changes:         make(chan string, 1),
+		done:            make(chan struct{}),
+		extraIgnoreDirs: extraIgnoreDirs,
 	}
 
-	if err := w.addRecursive(absRoot); err != nil {
+	watched, ignored, err := w.addRecursive(absRoot)
+	if err != nil {
 		fsw.Close()
 		return nil, err
 	}
+	w.logger.Info("[watcher] watching directories", "count", watched)
+	w.logger.Info("[watcher] ignoring directories", "count", ignored)
+	warnInotifyLimit(watched, w.logger)
 
 	w.wg.Add(1)
 	go w.run()
 	return w, nil
 }
 
-func (w *Watcher) addRecursive(dir string) error {
-	return filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			if os.IsPermission(err) {
+func (w *Watcher) addRecursive(dir string) (watched, ignored int, err error) {
+	err = filepath.WalkDir(dir, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			if os.IsPermission(walkErr) {
 				return filepath.SkipDir
 			}
-			return err
+			return walkErr
 		}
 		if !d.IsDir() {
 			return nil
 		}
 		if w.shouldIgnore(path) {
+			ignored++
 			return filepath.SkipDir
 		}
-		return w.watcher.Add(path)
+		if addErr := w.watcher.Add(path); addErr != nil {
+			return addErr
+		}
+		watched++
+		return nil
 	})
+	return watched, ignored, err
 }
 
 func (w *Watcher) shouldIgnore(path string) bool {
@@ -97,12 +119,32 @@ func (w *Watcher) shouldIgnore(path string) bool {
 				return true
 			}
 		}
+		for _, ignore := range w.extraIgnoreDirs {
+			if part == ignore {
+				return true
+			}
+		}
 	}
 	base := filepath.Base(path)
+	if strings.HasPrefix(base, ".#") || strings.HasPrefix(base, ".tmp") {
+		return true
+	}
 	for _, suffix := range ignoreSuffixes {
 		if strings.HasSuffix(base, suffix) || strings.HasPrefix(base, ".") && strings.HasSuffix(base, suffix) {
 			return true
 		}
+	}
+	return false
+}
+
+func isRelevantFile(path string) bool {
+	ext := filepath.Ext(path)
+	switch ext {
+	case ".go", ".mod", ".sum":
+		return true
+	}
+	if filepath.Base(path) == ".env" {
+		return true
 	}
 	return false
 }
@@ -119,8 +161,16 @@ func (w *Watcher) shouldIgnoreEvent(name string) bool {
 				return true
 			}
 		}
+		for _, ignore := range w.extraIgnoreDirs {
+			if part == ignore {
+				return true
+			}
+		}
 	}
 	base := filepath.Base(name)
+	if strings.HasPrefix(base, ".#") || strings.HasPrefix(base, ".tmp") {
+		return true
+	}
 	for _, suffix := range ignoreSuffixes {
 		if strings.HasSuffix(base, suffix) {
 			return true
@@ -144,7 +194,7 @@ func (w *Watcher) run() {
 			if !ok {
 				return
 			}
-			w.logger.Error("watcher error", "error", err)
+			w.logger.Error("[watcher] error", "error", err)
 		}
 	}
 }
@@ -162,40 +212,96 @@ func (w *Watcher) handleEvent(event fsnotify.Event) {
 			if event.Has(fsnotify.Create) {
 				if !w.shouldIgnore(event.Name) {
 					if err := w.watcher.Add(event.Name); err != nil {
-						w.logger.Debug("failed to add new directory", "path", event.Name, "error", err)
+						w.logger.Debug("[watcher] failed to add directory", "path", event.Name, "error", err)
 					}
 				}
 			}
 			if event.Has(fsnotify.Remove) {
 				w.watcher.Remove(event.Name)
 			}
+			return
 		}
-		w.debouncedNotify()
+		if isRelevantFile(event.Name) {
+			w.debouncedNotify(filepath.Base(event.Name))
+		}
 	}
 }
 
-func (w *Watcher) debouncedNotify() {
+func (w *Watcher) debouncedNotify(path string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	w.lastPath = path
+	w.burstCount++
+	if w.burstWindowTimer != nil {
+		w.burstWindowTimer.Stop()
+	}
+	w.burstWindowTimer = time.AfterFunc(burstWindow, w.onBurstWindow)
 	if w.debounce != nil {
 		w.debounce.Stop()
 	}
 	w.debounce = time.AfterFunc(debounceDelay, func() {
 		w.mu.Lock()
 		w.debounce = nil
+		if w.burstCount > burstThreshold {
+			w.burstPending = true
+			w.mu.Unlock()
+			return
+		}
 		closed := w.closed
+		pathToSend := w.lastPath
+		w.burstCount = 0
 		w.mu.Unlock()
-		if !closed {
+		if !closed && pathToSend != "" {
 			select {
-			case w.changes <- struct{}{}:
+			case w.changes <- pathToSend:
 			default:
 			}
 		}
 	})
 }
 
-func (w *Watcher) Changes() <-chan struct{} {
+func (w *Watcher) onBurstWindow() {
+	w.mu.Lock()
+	w.burstWindowTimer = nil
+	if !w.burstPending {
+		w.mu.Unlock()
+		return
+	}
+	w.burstPending = false
+	closed := w.closed
+	pathToSend := w.lastPath
+	w.burstCount = 0
+	w.mu.Unlock()
+	if !closed && pathToSend != "" {
+		select {
+		case w.changes <- pathToSend:
+		default:
+		}
+	}
+}
+
+func (w *Watcher) Changes() <-chan string {
 	return w.changes
+}
+
+func warnInotifyLimit(watched int, logger *slog.Logger) {
+	if runtime.GOOS != "linux" {
+		return
+	}
+	data, err := os.ReadFile("/proc/sys/fs/inotify/max_user_watches")
+	if err != nil {
+		return
+	}
+	limit, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || limit <= 0 {
+		return
+	}
+	if watched >= int(float64(limit)*0.9) {
+		logger.Warn("[watcher] inotify limit may be exceeded",
+			"watched", watched,
+			"limit", limit,
+			"msg", "consider increasing fs.inotify.max_user_watches")
+	}
 }
 
 func (w *Watcher) Close() error {
@@ -208,6 +314,10 @@ func (w *Watcher) Close() error {
 	if w.debounce != nil {
 		w.debounce.Stop()
 		w.debounce = nil
+	}
+	if w.burstWindowTimer != nil {
+		w.burstWindowTimer.Stop()
+		w.burstWindowTimer = nil
 	}
 	w.mu.Unlock()
 

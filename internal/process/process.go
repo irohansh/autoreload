@@ -12,7 +12,11 @@ import (
 	"time"
 )
 
-const killTimeout = 2 * time.Second
+const (
+	gracefulTimeout = 5 * time.Second
+	killTimeout     = 2 * time.Second
+	pollInterval    = 100 * time.Millisecond
+)
 
 type Cmd struct {
 	cmd    *exec.Cmd
@@ -67,13 +71,20 @@ func (p *Cmd) Kill() error {
 		}
 		p.logger.Debug("SIGTERM failed, trying SIGKILL", "pid", pid, "error", err)
 	}
-	time.Sleep(killTimeout)
+	deadline := time.Now().Add(gracefulTimeout)
+	for time.Now().Before(deadline) {
+		if err := syscall.Kill(-pid, 0); err == syscall.ESRCH {
+			return nil
+		}
+		time.Sleep(pollInterval)
+	}
 	if err := syscall.Kill(-pid, syscall.SIGKILL); err != nil {
 		if err == syscall.ESRCH {
 			return nil
 		}
 		return err
 	}
+	time.Sleep(killTimeout)
 	return nil
 }
 
