@@ -6,22 +6,6 @@ Built with Go using [fsnotify](https://github.com/fsnotify/fsnotify) for cross-p
 
 > **Note:** hotreload does not use third-party hot-reload frameworks (air, realize, reflex). The implementation is self-contained; fsnotify is the only external dependency for file watching.
 
-## Table of contents
-
-- [Get Started](#get-started)
-- [Usage](#usage)
-- [Features](#features)
-  - [Core behavior](#core-behavior)
-  - [File watching](#file-watching)
-  - [Process and server management](#process-and-server-management)
-  - [Build and failure handling](#build-and-failure-handling)
-  - [Configuration and UX](#configuration-and-ux)
-  - [Validation and robustness](#validation-and-robustness)
-- [Requirements](#requirements)
-- [Linux inotify limits](#linux-inotify-limits)
-- [Testing](#testing)
-- [Project structure](#project-structure)
-
 ## Get Started
 
 The quickest way to try hotreload is with the included demo. From the repository root, build the binary and run it against the sample HTTP server:
@@ -69,7 +53,7 @@ CLI flags override config values. Press `r` + Enter anytime to trigger a manual 
 
 ## Features
 
-When you open the README on GitHub and click **Features** in the table of contents (or scroll to this section), here is the full list of what hotreload supports.
+Here is the full list of what hotreload supports.
 
 ### Core behavior
 
