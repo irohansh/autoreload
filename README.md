@@ -1,26 +1,26 @@
-# hotreload
+# autoreload
 
-hotreload is a CLI tool that watches a project directory for source changes and automatically rebuilds and restarts your server. Edit code, save, and see the server restart within seconds—without manually stopping, rebuilding, or starting processes.
+autoreload is a CLI tool that watches a project directory for source changes and automatically rebuilds and restarts your server. Edit code, save, and see the server restart within seconds—without manually stopping, rebuilding, or starting processes.
 
 Built with Go using [fsnotify](https://github.com/fsnotify/fsnotify) for cross-platform file watching and the standard library `log/slog` for structured logging.
 
-> **Note:** hotreload does not use third-party hot-reload frameworks (air, realize, reflex). The implementation is self-contained; fsnotify is the only external dependency for file watching.
+> **Note:** autoreload does not use third-party hot-reload frameworks (air, realize, reflex). The implementation is self-contained; fsnotify is the only external dependency for file watching.
 
 ## Get Started
 
-The quickest way to try hotreload is with the included demo. From the repository root, build the binary and run it against the sample HTTP server:
+The quickest way to try autoreload is with the included demo. From the repository root, build the binary and run it against the sample HTTP server:
 
 ```bash
 make build
 make demo
 ```
 
-This starts hotreload watching `testserver/`. The test server listens on `http://localhost:8080`. Edit `testserver/main.go` and save—you should see a single rebuild and restart. Stop with Ctrl+C.
+This starts autoreload watching `testserver/`. The test server listens on `http://localhost:8080`. Edit `testserver/main.go` and save—you should see a single rebuild and restart. Stop with Ctrl+C.
 
 To run your own project:
 
 ```bash
-./bin/hotreload --root ./myproject --build "go build -o ./bin/server ./cmd/server" --exec "./bin/server"
+./bin/autoreload --root ./myproject --build "go build -o ./bin/server ./cmd/server" --exec "./bin/server"
 ```
 
 ## Usage
@@ -30,9 +30,9 @@ To run your own project:
 | `--root <dir>` | Directory to watch (including subdirectories). |
 | `--build "<cmd>"` | Shell command to build the project. Run with working directory `--root`. |
 | `--exec "<cmd>"` | Shell command to run the built server (e.g. `./bin/server`). |
-| `--config <path>` | Optional path to a YAML config file. If omitted, hotreload looks for `hotreload.yaml`, `.hotreload.yaml`, or `~/.config/hotreload.yaml`. |
+| `--config <path>` | Optional path to a YAML config file. If omitted, autoreload looks for `autoreload.yaml`, `.autoreload.yaml`, or `~/.config/autoreload.yaml`. |
 
-You can also use a config file and run with no arguments. Create `hotreload.yaml` in your project:
+You can also use a config file and run with no arguments. Create `autoreload.yaml` in your project:
 
 ```yaml
 root: .
@@ -46,18 +46,18 @@ ignore:
 Then run:
 
 ```bash
-hotreload
+autoreload
 ```
 
 CLI flags override config values. Press `r` + Enter anytime to trigger a manual rebuild and restart.
 
 ## Features
 
-Here is the full list of what hotreload supports.
+Here is the full list of what autoreload supports.
 
 ### Core behavior
 
-- **First build on start** — Runs a full build and starts the server as soon as you launch hotreload; no need to touch a file first.
+- **First build on start** — Runs a full build and starts the server as soon as you launch autoreload; no need to touch a file first.
 - **Automatic rebuild and restart** — On relevant file changes, cancels any in-flight build, runs a fresh build, and restarts the server. Build and server output stream to your terminal in real time (unbuffered).
 - **Build scheduler** — A single build worker consumes a request channel so only one build runs at a time; the latest change wins and previous requests are coalesced.
 - **Build cancellation** — If a new change arrives while a build is running, the current build is cancelled via context and the latest tree is built instead.
@@ -88,15 +88,15 @@ Here is the full list of what hotreload supports.
 
 ### Configuration and UX
 
-- **Config file** — Optional `hotreload.yaml` (or `.hotreload.yaml`, or `~/.config/hotreload.yaml`) with `root`, `build`, `exec`, and `ignore` list. CLI flags override config. Run `hotreload` with no args when a config file is present.
+- **Config file** — Optional `autoreload.yaml` (or `.autoreload.yaml`, or `~/.config/autoreload.yaml`) with `root`, `build`, `exec`, and `ignore` list. CLI flags override config. Run `autoreload` with no args when a config file is present.
 - **Manual restart hotkey** — Press `r` followed by Enter to trigger a rebuild and restart without saving a file (e.g. after changing env or config).
-- **Structured logging** — Logs use prefixes such as `[watcher]`, `[build]`, `[server]`, and `[hotreload]` for easy scanning.
-- **Graceful shutdown** — On SIGINT/SIGTERM, hotreload closes the watcher, waits for the runner to exit, and exits cleanly.
+- **Structured logging** — Logs use prefixes such as `[watcher]`, `[build]`, `[server]`, and `[autoreload]` for easy scanning.
+- **Graceful shutdown** — On SIGINT/SIGTERM, autoreload closes the watcher, waits for the runner to exit, and exits cleanly.
 
 ### Validation and robustness
 
 - **CLI validation** — Requires `--root`, `--build`, and `--exec` (or equivalent from config); prints usage and exits with a non-zero code if missing.
-- **Invalid root handling** — If the root path does not exist or is not a directory, hotreload logs an error and exits instead of proceeding.
+- **Invalid root handling** — If the root path does not exist or is not a directory, autoreload logs an error and exits instead of proceeding.
 
 ## Requirements
 
@@ -105,7 +105,7 @@ Here is the full list of what hotreload supports.
 
 ## Linux inotify limits
 
-On Linux, the number of inotify watches is limited by `fs.inotify.max_user_watches` (often 8192 by default). Large trees can hit this limit. hotreload filters out common directories to keep the count low and, when running on Linux, warns if the watch count is near the limit.
+On Linux, the number of inotify watches is limited by `fs.inotify.max_user_watches` (often 8192 by default). Large trees can hit this limit. autoreload filters out common directories to keep the count low and, when running on Linux, warns if the watch count is near the limit.
 
 To raise the limit temporarily:
 
@@ -134,8 +134,8 @@ Watcher tests cover `isRelevantFile`, `shouldIgnore`, `shouldIgnoreEvent`, and d
 ## Project structure
 
 ```
-hotreload/
-├── cmd/hotreload/
+autoreload/
+├── cmd/autoreload/
 │   └── main.go           # CLI, flags, config loading, watcher/runner wiring
 ├── internal/
 │   ├── config/
@@ -150,7 +150,7 @@ hotreload/
 │       └── process_test.go
 ├── testserver/
 │   ├── main.go          # Demo HTTP server
-│   └── hotreload.yaml   # Example config
+│   └── autoreload.yaml   # Example config
 ├── go.mod
 ├── go.sum
 ├── Makefile

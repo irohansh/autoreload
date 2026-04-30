@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 )
-
+// test 1
 func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Hello! Server time: %s\n", time.Now().Format(time.RFC3339))
