@@ -1,4 +1,4 @@
-package process
+package autoreload
 
 import (
 	"context"
@@ -15,7 +15,7 @@ func TestKillTerminatesProcess(t *testing.T) {
 	logger := slog.Default()
 	ctx := context.Background()
 
-	p, err := Start(ctx, "sleep", []string{"10"}, workDir, logger)
+	p, err := startProcess(ctx, "sleep", []string{"10"}, workDir, logger)
 	if err != nil {
 		t.Fatal(err)
 	}

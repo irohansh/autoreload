@@ -1,4 +1,4 @@
-package watcher
+package autoreload
 
 import (
 	"log/slog"
@@ -14,23 +14,26 @@ import (
 )
 
 const (
-	debounceDelay   = 400 * time.Millisecond
-	burstThreshold  = 20
-	burstWindow     = 1 * time.Second
+	debounceDelay  = 400 * time.Millisecond
+	burstThreshold = 20
+	burstWindow    = 1 * time.Second
 )
 
+var defaultExtensions = []string{".go", ".mod", ".sum", ".env"}
+
 var (
-	ignoreDirs = []string{".git", "node_modules", "vendor", "bin", "dist", "build", ".vscode", ".idea"}
+	ignoreDirs     = []string{".git", "node_modules", "vendor", "bin", "dist", "build", ".vscode", ".idea"}
 	ignoreSuffixes = []string{".tmp", ".swp", ".~", ".bak"}
 )
 
-type Watcher struct {
+type watcher struct {
 	root             string
 	logger           *slog.Logger
 	watcher          *fsnotify.Watcher
 	changes          chan string
 	lastPath         string
 	extraIgnoreDirs  []string
+	extensions       []string
 	mu               sync.Mutex
 	debounce         *time.Timer
 	burstCount       int
@@ -41,7 +44,7 @@ type Watcher struct {
 	closed           bool
 }
 
-func New(root string, logger *slog.Logger, extraIgnoreDirs []string) (*Watcher, error) {
+func newWatcher(root string, logger *slog.Logger, extraIgnoreDirs, extensions []string) (*watcher, error) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
@@ -60,13 +63,18 @@ func New(root string, logger *slog.Logger, extraIgnoreDirs []string) (*Watcher, 
 		return nil, err
 	}
 
-	w := &Watcher{
+	if len(extensions) == 0 {
+		extensions = defaultExtensions
+	}
+
+	w := &watcher{
 		root:            absRoot,
 		logger:          logger,
 		watcher:         fsw,
 		changes:         make(chan string, 1),
 		done:            make(chan struct{}),
 		extraIgnoreDirs: extraIgnoreDirs,
+		extensions:      extensions,
 	}
 
 	watched, ignored, err := w.addRecursive(absRoot)
@@ -83,7 +91,7 @@ func New(root string, logger *slog.Logger, extraIgnoreDirs []string) (*Watcher, 
 	return w, nil
 }
 
-func (w *Watcher) addRecursive(dir string) (watched, ignored int, err error) {
+func (w *watcher) addRecursive(dir string) (watched, ignored int, err error) {
 	err = filepath.WalkDir(dir, func(path string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			if os.IsPermission(walkErr) {
@@ -107,7 +115,7 @@ func (w *Watcher) addRecursive(dir string) (watched, ignored int, err error) {
 	return watched, ignored, err
 }
 
-func (w *Watcher) shouldIgnore(path string) bool {
+func (w *watcher) shouldIgnore(path string) bool {
 	rel, err := filepath.Rel(w.root, path)
 	if err != nil {
 		return true
@@ -137,19 +145,24 @@ func (w *Watcher) shouldIgnore(path string) bool {
 	return false
 }
 
-func isRelevantFile(path string) bool {
+func isRelevantFile(path string, extensions []string) bool {
 	ext := filepath.Ext(path)
-	switch ext {
-	case ".go", ".mod", ".sum":
-		return true
-	}
-	if filepath.Base(path) == ".env" {
-		return true
+	base := filepath.Base(path)
+	for _, e := range extensions {
+		if e == ".env" {
+			if base == ".env" {
+				return true
+			}
+			continue
+		}
+		if ext == e {
+			return true
+		}
 	}
 	return false
 }
 
-func (w *Watcher) shouldIgnoreEvent(name string) bool {
+func (w *watcher) shouldIgnoreEvent(name string) bool {
 	rel, err := filepath.Rel(w.root, name)
 	if err != nil {
 		return true
@@ -179,7 +192,7 @@ func (w *Watcher) shouldIgnoreEvent(name string) bool {
 	return false
 }
 
-func (w *Watcher) run() {
+func (w *watcher) run() {
 	defer w.wg.Done()
 	for {
 		select {
@@ -199,7 +212,7 @@ func (w *Watcher) run() {
 	}
 }
 
-func (w *Watcher) handleEvent(event fsnotify.Event) {
+func (w *watcher) handleEvent(event fsnotify.Event) {
 	if w.shouldIgnoreEvent(event.Name) {
 		return
 	}
@@ -221,13 +234,13 @@ func (w *Watcher) handleEvent(event fsnotify.Event) {
 			}
 			return
 		}
-		if isRelevantFile(event.Name) {
+		if isRelevantFile(event.Name, w.extensions) {
 			w.debouncedNotify(filepath.Base(event.Name))
 		}
 	}
 }
 
-func (w *Watcher) debouncedNotify(path string) {
+func (w *watcher) debouncedNotify(path string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.lastPath = path
@@ -260,7 +273,7 @@ func (w *Watcher) debouncedNotify(path string) {
 	})
 }
 
-func (w *Watcher) onBurstWindow() {
+func (w *watcher) onBurstWindow() {
 	w.mu.Lock()
 	w.burstWindowTimer = nil
 	if !w.burstPending {
@@ -280,7 +293,7 @@ func (w *Watcher) onBurstWindow() {
 	}
 }
 
-func (w *Watcher) Changes() <-chan string {
+func (w *watcher) Changes() <-chan string {
 	return w.changes
 }
 
@@ -304,7 +317,7 @@ func warnInotifyLimit(watched int, logger *slog.Logger) {
 	}
 }
 
-func (w *Watcher) Close() error {
+func (w *watcher) Close() error {
 	w.mu.Lock()
 	if w.closed {
 		w.mu.Unlock()

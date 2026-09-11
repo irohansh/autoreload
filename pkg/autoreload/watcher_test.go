@@ -1,4 +1,4 @@
-package watcher
+package autoreload
 
 import (
 	"log/slog"
@@ -27,7 +27,7 @@ func TestIsRelevantFile(t *testing.T) {
 		{"Makefile", false},
 	}
 	for _, c := range cases {
-		got := isRelevantFile(c.path)
+		got := isRelevantFile(c.path, defaultExtensions)
 		if got != c.want {
 			t.Errorf("isRelevantFile(%q) = %v, want %v", c.path, got, c.want)
 		}
@@ -42,7 +42,7 @@ func TestShouldIgnore(t *testing.T) {
 	}
 
 	t.Run("default_ignore", func(t *testing.T) {
-		w := &Watcher{root: root, extraIgnoreDirs: nil}
+		w := &watcher{root: root, extraIgnoreDirs: nil}
 		cases := []struct {
 			path string
 			want bool
@@ -68,7 +68,7 @@ func TestShouldIgnore(t *testing.T) {
 	})
 
 	t.Run("extra_ignore_dirs", func(t *testing.T) {
-		w := &Watcher{root: root, extraIgnoreDirs: []string{"custom"}}
+		w := &watcher{root: root, extraIgnoreDirs: []string{"custom"}}
 		path := filepath.Join(root, "custom", "file.go")
 		if !w.shouldIgnore(path) {
 			t.Errorf("shouldIgnore(%q) = false, want true (extra ignore)", path)
@@ -82,7 +82,7 @@ func TestShouldIgnoreEvent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w := &Watcher{root: root, extraIgnoreDirs: nil}
+	w := &watcher{root: root, extraIgnoreDirs: nil}
 	cases := []struct {
 		name string
 		want bool
@@ -111,7 +111,7 @@ func TestDebounceBurst(t *testing.T) {
 	}
 
 	logger := slog.Default()
-	w, err := New(dir, logger, nil)
+	w, err := newWatcher(dir, logger, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

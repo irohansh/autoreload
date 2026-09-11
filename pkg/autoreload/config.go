@@ -1,4 +1,4 @@
-package config
+package autoreload
 
 import (
 	"os"
@@ -7,6 +7,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Config is the on-disk (autoreload.yaml) configuration format.
 type Config struct {
 	Root   string   `yaml:"root"`
 	Build  string   `yaml:"build"`
@@ -14,6 +15,7 @@ type Config struct {
 	Ignore []string `yaml:"ignore"`
 }
 
+// Load reads and parses an autoreload.yaml file from path.
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -26,6 +28,7 @@ func Load(path string) (*Config, error) {
 	return &c, nil
 }
 
+// DefaultPaths returns the locations searched for a config file, in order.
 func DefaultPaths() []string {
 	home, _ := os.UserHomeDir()
 	return []string{

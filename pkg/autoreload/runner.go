@@ -1,4 +1,4 @@
-package runner
+package autoreload
 
 import (
 	"context"
@@ -12,24 +12,22 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/irohansh/autoreload/internal/process"
 )
 
 const (
-	crashThreshold  = 3 * time.Second
-	initialBackoff  = 1 * time.Second
-	maxBackoff      = 16 * time.Second
+	crashThreshold = 3 * time.Second
+	initialBackoff = 1 * time.Second
+	maxBackoff     = 16 * time.Second
 )
 
-type Runner struct {
+type runner struct {
 	root             string
 	buildCmd         string
 	execCmd          string
 	logger           *slog.Logger
 	buildCancel      context.CancelFunc
 	buildMu          sync.Mutex
-	server           *process.Cmd
+	server           *procCmd
 	serverDone       chan struct{}
 	serverMu         sync.Mutex
 	serverStart      time.Time
@@ -39,9 +37,9 @@ type Runner struct {
 	restartScheduled bool
 }
 
-func New(buildCmd, execCmd, root string, logger *slog.Logger) *Runner {
+func newRunner(buildCmd, execCmd, root string, logger *slog.Logger) *runner {
 	absRoot, _ := filepath.Abs(root)
-	return &Runner{
+	return &runner{
 		root:     absRoot,
 		buildCmd: buildCmd,
 		execCmd:  execCmd,
@@ -49,7 +47,7 @@ func New(buildCmd, execCmd, root string, logger *slog.Logger) *Runner {
 	}
 }
 
-func (r *Runner) Run(changes <-chan string, manualRestart <-chan struct{}) error {
+func (r *runner) Run(changes <-chan string, manualRestart <-chan struct{}) error {
 	if err := r.runBuild(context.Background()); err != nil {
 		return err
 	}
@@ -85,7 +83,7 @@ func (r *Runner) Run(changes <-chan string, manualRestart <-chan struct{}) error
 	}
 }
 
-func (r *Runner) scheduleBuild(path string, buildRequest chan string) {
+func (r *runner) scheduleBuild(path string, buildRequest chan string) {
 	r.buildMu.Lock()
 	if r.buildCancel != nil {
 		r.buildCancel()
@@ -101,7 +99,7 @@ func (r *Runner) scheduleBuild(path string, buildRequest chan string) {
 	}
 }
 
-func (r *Runner) buildWorker(buildRequest chan string) {
+func (r *runner) buildWorker(buildRequest chan string) {
 	for path := range buildRequest {
 		r.killServer()
 
@@ -137,7 +135,7 @@ func (r *Runner) buildWorker(buildRequest chan string) {
 	}
 }
 
-func (r *Runner) onServerExited(changes <-chan string) {
+func (r *runner) onServerExited(changes <-chan string) {
 	runDuration := time.Since(r.serverStart)
 	if runDuration < crashThreshold {
 		if r.backoff == 0 {
@@ -154,7 +152,7 @@ func (r *Runner) onServerExited(changes <-chan string) {
 	}
 }
 
-func (r *Runner) runBuild(ctx context.Context) error {
+func (r *runner) runBuild(ctx context.Context) error {
 	r.logger.Info("[build] starting...")
 	start := time.Now()
 	var cmd *exec.Cmd
@@ -175,11 +173,11 @@ func (r *Runner) runBuild(ctx context.Context) error {
 	return nil
 }
 
-func (r *Runner) startServer(ctx context.Context) {
+func (r *runner) startServer(ctx context.Context) {
 	r.serverMu.Lock()
 	defer r.serverMu.Unlock()
 
-	server, err := process.StartWithShell(ctx, r.execCmd, r.root, r.logger)
+	server, err := startWithShell(ctx, r.execCmd, r.root, r.logger)
 	if err != nil {
 		r.logger.Error("[server] failed to start", "error", err)
 		return
@@ -196,7 +194,7 @@ func (r *Runner) startServer(ctx context.Context) {
 	r.logger.Info("[server] started", "pid", server.PID())
 }
 
-func (r *Runner) killServer() {
+func (r *runner) killServer() {
 	r.serverMu.Lock()
 	server := r.server
 	serverDone := r.serverDone
@@ -212,26 +210,26 @@ func (r *Runner) killServer() {
 	}
 }
 
-func (r *Runner) getServerDone() <-chan struct{} {
+func (r *runner) getServerDone() <-chan struct{} {
 	r.serverMu.Lock()
 	defer r.serverMu.Unlock()
 	return r.serverDone
 }
 
-func (r *Runner) clearServerDone() {
+func (r *runner) clearServerDone() {
 	r.serverMu.Lock()
 	defer r.serverMu.Unlock()
 	r.server = nil
 	r.serverDone = nil
 }
 
-func (r *Runner) setRestartScheduled(v bool) {
+func (r *runner) setRestartScheduled(v bool) {
 	r.restartMu.Lock()
 	defer r.restartMu.Unlock()
 	r.restartScheduled = v
 }
 
-func (r *Runner) execBinaryPath() string {
+func (r *runner) execBinaryPath() string {
 	fields := strings.Fields(r.execCmd)
 	if len(fields) == 0 {
 		return ""
@@ -243,7 +241,7 @@ func (r *Runner) execBinaryPath() string {
 	return filepath.Join(r.root, bin)
 }
 
-func (r *Runner) hashBinary(path string) string {
+func (r *runner) hashBinary(path string) string {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return ""
@@ -252,7 +250,7 @@ func (r *Runner) hashBinary(path string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func (r *Runner) shouldSkipRestart() bool {
+func (r *runner) shouldSkipRestart() bool {
 	path := r.execBinaryPath()
 	if path == "" {
 		return false

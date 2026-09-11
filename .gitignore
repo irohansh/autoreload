@@ -1,5 +1,6 @@
 bin/
 testserver/bin/
+pkg/**/bin/
 dist/
 vendor/
 
@@ -33,3 +34,4 @@ __debug_bin*
 .cache/
 
 TESTING.md
+execution.md

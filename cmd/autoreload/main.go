@@ -2,17 +2,15 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"flag"
 	"fmt"
-	"log/slog"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
 
-	"github.com/irohansh/autoreload/internal/config"
-	"github.com/irohansh/autoreload/internal/runner"
-	"github.com/irohansh/autoreload/internal/watcher"
+	"github.com/irohansh/autoreload/pkg/autoreload"
 )
 
 func main() {
@@ -22,17 +20,17 @@ func main() {
 	execCmd := flag.String("exec", "", "Command used to run the built server")
 	flag.Parse()
 
-	var cfg *config.Config
+	var cfg *autoreload.Config
 	if *configPath != "" {
 		var err error
-		cfg, err = config.Load(*configPath)
+		cfg, err = autoreload.Load(*configPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "[autoreload] load config: %v\n", err)
 			os.Exit(1)
 		}
 	} else {
-		for _, p := range config.DefaultPaths() {
-			cfg, _ = config.Load(p)
+		for _, p := range autoreload.DefaultPaths() {
+			cfg, _ = autoreload.Load(p)
 			if cfg != nil {
 				break
 			}
@@ -57,54 +55,37 @@ func main() {
 		os.Exit(1)
 	}
 
-	var extraIgnore []string
-	if cfg != nil && len(cfg.Ignore) > 0 {
-		extraIgnore = cfg.Ignore
+	opts := autoreload.Options{
+		Root:  *root,
+		Build: *buildCmd,
+		Exec:  *execCmd,
+	}
+	if cfg != nil {
+		opts.Ignore = cfg.Ignore
 	}
 
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
-
-	w, err := watcher.New(*root, logger, extraIgnore)
+	engine, err := autoreload.New(opts)
 	if err != nil {
-		logger.Error("[autoreload] failed to create watcher", "error", err)
+		fmt.Fprintf(os.Stderr, "[autoreload] %v\n", err)
 		os.Exit(1)
 	}
-	defer w.Close()
+	defer engine.Close()
 
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
-	manualRestart := make(chan struct{}, 1)
-	logger.Info("[autoreload] Press 'r' + Enter to rebuild manually")
+	fmt.Fprintln(os.Stderr, "[autoreload] Press 'r' + Enter to rebuild manually")
 	go func() {
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
 			if strings.TrimSpace(scanner.Text()) == "r" {
-				select {
-				case manualRestart <- struct{}{}:
-				default:
-				}
+				engine.Restart()
 			}
 		}
 	}()
 
-	done := make(chan error, 1)
-	r := runner.New(*buildCmd, *execCmd, *root, logger)
-	go func() {
-		done <- r.Run(w.Changes(), manualRestart)
-	}()
-
-	select {
-	case err := <-done:
-		if err != nil {
-			logger.Error("[autoreload] runner failed", "error", err)
-			os.Exit(1)
-		}
-	case <-sigCh:
-		logger.Info("[autoreload] shutting down...")
-		w.Close()
-		if err := <-done; err != nil {
-			logger.Error("[autoreload] runner failed", "error", err)
-		}
+	if err := engine.Run(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "[autoreload] runner failed: %v\n", err)
+		os.Exit(1)
 	}
 }

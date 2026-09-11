@@ -1,4 +1,4 @@
-package process
+package autoreload
 
 import (
 	"context"
@@ -18,13 +18,13 @@ const (
 	pollInterval    = 100 * time.Millisecond
 )
 
-type Cmd struct {
+type procCmd struct {
 	cmd    *exec.Cmd
 	logger *slog.Logger
 	mu     sync.Mutex
 }
 
-func Start(ctx context.Context, name string, args []string, workDir string, logger *slog.Logger) (*Cmd, error) {
+func startProcess(ctx context.Context, name string, args []string, workDir string, logger *slog.Logger) (*procCmd, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = workDir
 	cmd.Stdout = os.Stdout
@@ -38,11 +38,11 @@ func Start(ctx context.Context, name string, args []string, workDir string, logg
 		return nil, err
 	}
 
-	p := &Cmd{cmd: cmd, logger: logger}
+	p := &procCmd{cmd: cmd, logger: logger}
 	return p, nil
 }
 
-func StartWithShell(ctx context.Context, command string, workDir string, logger *slog.Logger) (*Cmd, error) {
+func startWithShell(ctx context.Context, command string, workDir string, logger *slog.Logger) (*procCmd, error) {
 	var shell string
 	var flag string
 	if runtime.GOOS == "windows" {
@@ -52,10 +52,10 @@ func StartWithShell(ctx context.Context, command string, workDir string, logger 
 		shell = "sh"
 		flag = "-c"
 	}
-	return Start(ctx, shell, []string{flag, command}, workDir, logger)
+	return startProcess(ctx, shell, []string{flag, command}, workDir, logger)
 }
 
-func (p *Cmd) Kill() error {
+func (p *procCmd) Kill() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.cmd == nil || p.cmd.Process == nil {
@@ -88,7 +88,7 @@ func (p *Cmd) Kill() error {
 	return nil
 }
 
-func (p *Cmd) killWindows(pid int) error {
+func (p *procCmd) killWindows(pid int) error {
 	cmd := exec.Command("taskkill", "/pid", fmt.Sprintf("%d", pid), "/t", "/f")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -99,14 +99,14 @@ func (p *Cmd) killWindows(pid int) error {
 	return nil
 }
 
-func (p *Cmd) Wait() error {
+func (p *procCmd) Wait() error {
 	if p.cmd == nil {
 		return nil
 	}
 	return p.cmd.Wait()
 }
 
-func (p *Cmd) PID() int {
+func (p *procCmd) PID() int {
 	if p.cmd == nil || p.cmd.Process == nil {
 		return 0
 	}
