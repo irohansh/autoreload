@@ -10,13 +10,13 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/rohan/hotreload/internal/config"
-	"github.com/rohan/hotreload/internal/runner"
-	"github.com/rohan/hotreload/internal/watcher"
+	"github.com/irohansh/autoreload/internal/config"
+	"github.com/irohansh/autoreload/internal/runner"
+	"github.com/irohansh/autoreload/internal/watcher"
 )
 
 func main() {
-	configPath := flag.String("config", "", "Path to hotreload.yaml (optional)")
+	configPath := flag.String("config", "", "Path to autoreload.yaml (optional)")
 	root := flag.String("root", "", "Directory to watch for file changes")
 	buildCmd := flag.String("build", "", "Command used to build the project")
 	execCmd := flag.String("exec", "", "Command used to run the built server")
@@ -27,7 +27,7 @@ func main() {
 		var err error
 		cfg, err = config.Load(*configPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "[hotreload] load config: %v\n", err)
+			fmt.Fprintf(os.Stderr, "[autoreload] load config: %v\n", err)
 			os.Exit(1)
 		}
 	} else {
@@ -52,8 +52,8 @@ func main() {
 	}
 
 	if *root == "" || *buildCmd == "" || *execCmd == "" {
-		fmt.Fprintln(os.Stderr, "Usage: hotreload [--config <path>] --root <dir> --build \"<cmd>\" --exec \"<cmd>\"")
-		fmt.Fprintln(os.Stderr, "  Or create hotreload.yaml with root, build, exec, ignore.")
+		fmt.Fprintln(os.Stderr, "Usage: autoreload [--config <path>] --root <dir> --build \"<cmd>\" --exec \"<cmd>\"")
+		fmt.Fprintln(os.Stderr, "  Or create autoreload.yaml with root, build, exec, ignore.")
 		os.Exit(1)
 	}
 
@@ -66,7 +66,7 @@ func main() {
 
 	w, err := watcher.New(*root, logger, extraIgnore)
 	if err != nil {
-		logger.Error("[hotreload] failed to create watcher", "error", err)
+		logger.Error("[autoreload] failed to create watcher", "error", err)
 		os.Exit(1)
 	}
 	defer w.Close()
@@ -75,7 +75,7 @@ func main() {
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 	manualRestart := make(chan struct{}, 1)
-	logger.Info("[hotreload] Press 'r' + Enter to rebuild manually")
+	logger.Info("[autoreload] Press 'r' + Enter to rebuild manually")
 	go func() {
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
@@ -97,14 +97,14 @@ func main() {
 	select {
 	case err := <-done:
 		if err != nil {
-			logger.Error("[hotreload] runner failed", "error", err)
+			logger.Error("[autoreload] runner failed", "error", err)
 			os.Exit(1)
 		}
 	case <-sigCh:
-		logger.Info("[hotreload] shutting down...")
+		logger.Info("[autoreload] shutting down...")
 		w.Close()
 		if err := <-done; err != nil {
-			logger.Error("[hotreload] runner failed", "error", err)
+			logger.Error("[autoreload] runner failed", "error", err)
 		}
 	}
 }

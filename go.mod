@@ -1,4 +1,4 @@
-module github.com/rohan/hotreload
+module github.com/irohansh/autoreload
 
 go 1.21
 

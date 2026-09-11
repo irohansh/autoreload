@@ -29,8 +29,8 @@ func Load(path string) (*Config, error) {
 func DefaultPaths() []string {
 	home, _ := os.UserHomeDir()
 	return []string{
-		"hotreload.yaml",
-		".hotreload.yaml",
-		filepath.Join(home, ".config", "hotreload.yaml"),
+		"autoreload.yaml",
+		".autoreload.yaml",
+		filepath.Join(home, ".config", "autoreload.yaml"),
 	}
 }

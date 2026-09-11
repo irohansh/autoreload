@@ -1,6 +1,6 @@
 # Feature Verification Checklist
 
-Use this checklist to verify hotreload behavior on your machine. Run from the project root unless noted.
+Use this checklist to verify autoreload behavior on your machine. Run from the project root unless noted.
 
 ---
 
@@ -8,7 +8,7 @@ Use this checklist to verify hotreload behavior on your machine. Run from the pr
 
 | Step | Command / action | Expected |
 |------|------------------|----------|
-| Build | `make build` | Exit 0; `bin/hotreload` exists. |
+| Build | `make build` | Exit 0; `bin/autoreload` exists. |
 
 ---
 
@@ -32,7 +32,7 @@ Use this checklist to verify hotreload behavior on your machine. Run from the pr
 
 | Step | Command / action | Expected |
 |------|------------------|----------|
-| With demo running | Edit `testserver/main.go` (e.g. change response text), save. | Logs: `[hotreload] change detected` (path=main.go), `[build] starting...`, `[build] ok`, `[hotreload] build completed`, `[server] started`, `[hotreload] server restarted`. |
+| With demo running | Edit `testserver/main.go` (e.g. change response text), save. | Logs: `[autoreload] change detected` (path=main.go), `[build] starting...`, `[build] ok`, `[autoreload] build completed`, `[server] started`, `[autoreload] server restarted`. |
 | Verify | `curl -s http://localhost:8080/` | Response shows your new text. |
 
 ---
@@ -41,7 +41,7 @@ Use this checklist to verify hotreload behavior on your machine. Run from the pr
 
 | Step | Command / action | Expected |
 |------|------------------|----------|
-| With demo running | `echo "x" >> testserver/README.md` or `touch testserver/foo.json` | No `[build] starting...` or `[hotreload] change detected`. Server keeps running. |
+| With demo running | `echo "x" >> testserver/README.md` or `touch testserver/foo.json` | No `[build] starting...` or `[autoreload] change detected`. Server keeps running. |
 
 ---
 
@@ -49,7 +49,7 @@ Use this checklist to verify hotreload behavior on your machine. Run from the pr
 
 | Step | Command / action | Expected |
 |------|------------------|----------|
-| With demo running | Change and save `testserver/main.go` several times in 1–2 seconds. | One rebuild cycle only (one `[build] starting...` / `[build] ok` / `[hotreload] server restarted`). |
+| With demo running | Change and save `testserver/main.go` several times in 1–2 seconds. | One rebuild cycle only (one `[build] starting...` / `[build] ok` / `[autoreload] server restarted`). |
 
 ---
 
@@ -57,7 +57,7 @@ Use this checklist to verify hotreload behavior on your machine. Run from the pr
 
 | Step | Command / action | Expected |
 |------|------------------|----------|
-| With demo running | Introduce a syntax error in `testserver/main.go` (e.g. `x :=` with no value), save. | `[build] starting...`, `[build] failed` with duration and error; compiler output on stderr. Server is **not** restarted; hotreload keeps running. |
+| With demo running | Introduce a syntax error in `testserver/main.go` (e.g. `x :=` with no value), save. | `[build] starting...`, `[build] failed` with duration and error; compiler output on stderr. Server is **not** restarted; autoreload keeps running. |
 | Fix | Restore valid code, save. | Build succeeds and server restarts. |
 
 ---
@@ -66,7 +66,7 @@ Use this checklist to verify hotreload behavior on your machine. Run from the pr
 
 | Step | Command / action | Expected |
 |------|------------------|----------|
-| With demo running | Press Ctrl+C in the hotreload terminal. | Log: `[hotreload] shutting down...`. Process exits; no panic or hang. |
+| With demo running | Press Ctrl+C in the autoreload terminal. | Log: `[autoreload] shutting down...`. Process exits; no panic or hang. |
 
 ---
 
@@ -74,7 +74,7 @@ Use this checklist to verify hotreload behavior on your machine. Run from the pr
 
 | Step | Command / action | Expected |
 |------|------------------|----------|
-| With demo running | Type `r` and press Enter (no file save). | Log: `[hotreload] manual restart requested`; then `[build] starting...`, `[build] ok`, `[hotreload] server restarted`. |
+| With demo running | Type `r` and press Enter (no file save). | Log: `[autoreload] manual restart requested`; then `[build] starting...`, `[build] ok`, `[autoreload] server restarted`. |
 
 ---
 
@@ -82,7 +82,7 @@ Use this checklist to verify hotreload behavior on your machine. Run from the pr
 
 | Step | Command / action | Expected |
 |------|------------------|----------|
-| Run with config only | `cd testserver && ../bin/hotreload` (no `--root`/`--build`/`--exec`). | Same as demo: build runs, server starts on :8080. Uses `testserver/hotreload.yaml`. |
+| Run with config only | `cd testserver && ../bin/autoreload` (no `--root`/`--build`/`--exec`). | Same as demo: build runs, server starts on :8080. Uses `testserver/autoreload.yaml`. |
 
 ---
 
@@ -90,8 +90,8 @@ Use this checklist to verify hotreload behavior on your machine. Run from the pr
 
 | Step | Command / action | Expected |
 |------|------------------|----------|
-| No args | `./bin/hotreload` (from root; no config in cwd) | Stderr: usage message. Exit code non-zero. |
-| Missing flags | `./bin/hotreload --root ./testserver` | Same: usage and non-zero exit. |
+| No args | `./bin/autoreload` (from root; no config in cwd) | Stderr: usage message. Exit code non-zero. |
+| Missing flags | `./bin/autoreload --root ./testserver` | Same: usage and non-zero exit. |
 
 ---
 
@@ -99,7 +99,7 @@ Use this checklist to verify hotreload behavior on your machine. Run from the pr
 
 | Step | Command / action | Expected |
 |------|------------------|----------|
-| Bad root | `./bin/hotreload --root /nonexistent/path --build "true" --exec "true"` | Log: `[hotreload] failed to create watcher` with error (e.g. "no such file or directory"). Non-zero exit. |
+| Bad root | `./bin/autoreload --root /nonexistent/path --build "true" --exec "true"` | Log: `[autoreload] failed to create watcher` with error (e.g. "no such file or directory"). Non-zero exit. |
 
 ---
 
@@ -107,7 +107,7 @@ Use this checklist to verify hotreload behavior on your machine. Run from the pr
 
 | Step | Command / action | Expected |
 |------|------------------|----------|
-| With demo running | Trigger a rebuild that does not change the binary (e.g. add a comment in `testserver/main.go`, save; wait for restart; add another comment, save). | Second cycle may log `[hotreload] binary unchanged, skipping server restart` and no new `[server] started`. (Behavior can depend on timing.) |
+| With demo running | Trigger a rebuild that does not change the binary (e.g. add a comment in `testserver/main.go`, save; wait for restart; add another comment, save). | Second cycle may log `[autoreload] binary unchanged, skipping server restart` and no new `[server] started`. (Behavior can depend on timing.) |
 
 ---
 
@@ -115,7 +115,7 @@ Use this checklist to verify hotreload behavior on your machine. Run from the pr
 
 | Step | Command / action | Expected |
 |------|------------------|----------|
-| Run with exiting exec | From project root: `./bin/hotreload --root ./testserver --build "go build -o ./bin/server ." --exec "exit 1"` (or from `testserver/`: `../bin/hotreload --root . --build "go build -o ./bin/server ." --exec "exit 1"`). | Build runs, server "starts" then exits. Log: `[server] crashed quickly, applying backoff` with `backoff=1s`. After ~1 s, one new build/restart. No repeated "[server] exited, restarting" lines; single restart per exit. |
+| Run with exiting exec | From project root: `./bin/autoreload --root ./testserver --build "go build -o ./bin/server ." --exec "exit 1"` (or from `testserver/`: `../bin/autoreload --root . --build "go build -o ./bin/server ." --exec "exit 1"`). | Build runs, server "starts" then exits. Log: `[server] crashed quickly, applying backoff` with `backoff=1s`. After ~1 s, one new build/restart. No repeated "[server] exited, restarting" lines; single restart per exit. |
 
 ---
 
@@ -123,7 +123,7 @@ Use this checklist to verify hotreload behavior on your machine. Run from the pr
 
 | Step | Command / action | Expected |
 |------|------------------|----------|
-| Start hotreload | `make demo` (or any valid run). | Startup logs include `[watcher] watching directories` with `count=N` and `[watcher] ignoring directories` with `count=M`. |
+| Start autoreload | `make demo` (or any valid run). | Startup logs include `[watcher] watching directories` with `count=N` and `[watcher] ignoring directories` with `count=M`. |
 
 ---
 
@@ -131,7 +131,7 @@ Use this checklist to verify hotreload behavior on your machine. Run from the pr
 
 | Step | Command / action | Expected |
 |------|------------------|----------|
-| Run and trigger build | `make demo`, then save a change in `testserver/main.go`. | Log lines use prefixes: `[watcher]`, `[build]`, `[server]`, `[hotreload]`. |
+| Run and trigger build | `make demo`, then save a change in `testserver/main.go`. | Log lines use prefixes: `[watcher]`, `[build]`, `[server]`, `[autoreload]`. |
 
 ---
 

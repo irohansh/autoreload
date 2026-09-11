@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rohan/hotreload/internal/process"
+	"github.com/irohansh/autoreload/internal/process"
 )
 
 const (
@@ -68,7 +68,7 @@ func (r *Runner) Run(changes <-chan string, manualRestart <-chan struct{}) error
 			}
 			r.scheduleBuild(path, buildRequest)
 		case <-manualRestart:
-			r.logger.Info("[hotreload] manual restart requested")
+			r.logger.Info("[autoreload] manual restart requested")
 			r.scheduleBuild("", buildRequest)
 		case <-r.getServerDone():
 			r.clearServerDone()
@@ -111,7 +111,7 @@ func (r *Runner) buildWorker(buildRequest chan string) {
 		r.buildMu.Unlock()
 
 		if path != "" {
-			r.logger.Info("[hotreload] change detected", "path", path)
+			r.logger.Info("[autoreload] change detected", "path", path)
 		}
 		start := time.Now()
 		if err := r.runBuild(ctx); err != nil {
@@ -125,14 +125,14 @@ func (r *Runner) buildWorker(buildRequest chan string) {
 			r.setRestartScheduled(false)
 			continue
 		}
-		r.logger.Info("[hotreload] build completed", "duration", time.Since(start))
+		r.logger.Info("[autoreload] build completed", "duration", time.Since(start))
 		if r.shouldSkipRestart() {
-			r.logger.Info("[hotreload] binary unchanged, skipping server restart")
+			r.logger.Info("[autoreload] binary unchanged, skipping server restart")
 			r.setRestartScheduled(false)
 			continue
 		}
 		r.startServer(ctx)
-		r.logger.Info("[hotreload] server restarted")
+		r.logger.Info("[autoreload] server restarted")
 		r.setRestartScheduled(false)
 	}
 }

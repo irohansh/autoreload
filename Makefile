@@ -1,13 +1,13 @@
 .PHONY: build run demo clean
 
 build:
-	go build -o bin/hotreload ./cmd/hotreload
+	go build -o bin/autoreload ./cmd/autoreload
 
 run: build
-	./bin/hotreload --root . --build "go build -o bin/server ./cmd/hotreload" --exec "./bin/server"
+	./bin/autoreload --root . --build "go build -o bin/server ./cmd/autoreload" --exec "./bin/server"
 
 demo: build
-	./bin/hotreload --root ./testserver --build "go build -o ./bin/server ." --exec "./bin/server"
+	./bin/autoreload --root ./testserver --build "go build -o ./bin/server ." --exec "./bin/server"
 
 clean:
 	rm -rf bin/ ./testserver/bin/
