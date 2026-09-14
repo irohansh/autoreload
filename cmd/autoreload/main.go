@@ -13,12 +13,22 @@ import (
 	"github.com/irohansh/autoreload/pkg/autoreload"
 )
 
+// version is set at build time via -ldflags "-X main.version=...".
+// It defaults to "dev" for local/unversioned builds.
+var version = "dev"
+
 func main() {
 	configPath := flag.String("config", "", "Path to autoreload.yaml (optional)")
 	root := flag.String("root", "", "Directory to watch for file changes")
 	buildCmd := flag.String("build", "", "Command used to build the project")
 	execCmd := flag.String("exec", "", "Command used to run the built server")
+	showVersion := flag.Bool("version", false, "Print version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("autoreload %s\n", version)
+		return
+	}
 
 	var cfg *autoreload.Config
 	if *configPath != "" {

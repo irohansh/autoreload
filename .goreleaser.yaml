@@ -1,0 +1,53 @@
+version: 2
+
+project_name: autoreload
+
+before:
+  hooks:
+    - go mod tidy
+
+# Note: windows is intentionally excluded. pkg/autoreload/process.go uses
+# Unix-only syscalls (syscall.Kill, SysProcAttr.Setpgid, ...) guarded only at
+# runtime via runtime.GOOS, so GOOS=windows does not compile. Add windows here
+# once the process code is split into OS-specific files with build tags.
+builds:
+  - id: autoreload
+    main: ./cmd/autoreload
+    binary: autoreload
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: autoreload
+    ids:
+      - autoreload
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_
+      {{- .Os }}_{{ .Arch }}
+    formats: [tar.gz]
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+release:
+  draft: false
+  prerelease: auto

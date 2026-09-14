@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+# Note: windows-latest is intentionally excluded. pkg/autoreload/process.go
+# uses Unix-only syscalls (syscall.Kill, syscall.SIGTERM, syscall.ESRCH,
+# SysProcAttr.Setpgid) guarded only at runtime via runtime.GOOS, so the
+# package does not compile on Windows. Add windows-latest here once the
+# process code is split into OS-specific files with build tags.
+jobs:
+  build-test:
+    name: build & test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+          check-latest: true
+          cache: true
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go build
+        run: go build ./...
+
+      - name: go test (race)
+        run: go test ./... -race

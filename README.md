@@ -6,6 +6,30 @@ Built with Go using [fsnotify](https://github.com/fsnotify/fsnotify) for cross-p
 
 > **Note:** autoreload does not use third-party hot-reload frameworks (air, realize, reflex). The implementation is self-contained; fsnotify is the only external dependency for file watching.
 
+## Install
+
+**With `go install`** (requires Go 1.21+):
+
+```bash
+go install github.com/irohansh/autoreload/cmd/autoreload@latest
+```
+
+This drops the `autoreload` binary in `$(go env GOPATH)/bin` — make sure that directory is on your `PATH`.
+
+**Prebuilt binary:** Download the archive for your OS/arch from the [Releases page](https://github.com/irohansh/autoreload/releases), extract it, and put the `autoreload` binary somewhere on your `PATH`:
+
+```bash
+# example for linux/amd64 — adjust VERSION and the asset name for your platform
+VERSION=1.0.0
+curl -sSL -o autoreload.tar.gz \
+  https://github.com/irohansh/autoreload/releases/download/v${VERSION}/autoreload_${VERSION}_linux_amd64.tar.gz
+tar -xzf autoreload.tar.gz
+sudo mv autoreload /usr/local/bin/
+autoreload --version
+```
+
+Prebuilt binaries are published for **linux** and **darwin** on **amd64** and **arm64**. Windows is not currently distributed (the process-management code uses Unix-only syscalls); build from source with `go install` if you need it.
+
 ## Get Started
 
 The quickest way to try autoreload is with the included demo. From the repository root, build the binary and run it against the sample HTTP server:
