@@ -34,6 +34,7 @@ type watcher struct {
 	lastPath         string
 	extraIgnoreDirs  []string
 	extensions       []string
+	watchedFiles     map[string]struct{}
 	mu               sync.Mutex
 	debounce         *time.Timer
 	burstCount       int
@@ -75,6 +76,7 @@ func newWatcher(root string, logger *slog.Logger, extraIgnoreDirs, extensions []
 		done:            make(chan struct{}),
 		extraIgnoreDirs: extraIgnoreDirs,
 		extensions:      extensions,
+		watchedFiles:    make(map[string]struct{}),
 	}
 
 	watched, ignored, err := w.addRecursive(absRoot)
@@ -83,6 +85,7 @@ func newWatcher(root string, logger *slog.Logger, extraIgnoreDirs, extensions []
 		return nil, err
 	}
 	w.logger.Info("[watcher] watching directories", "count", watched)
+	w.logger.Info("[watcher] watching files", "count", len(w.watchedFiles))
 	w.logger.Info("[watcher] ignoring directories", "count", ignored)
 	warnInotifyLimit(watched, w.logger)
 
@@ -100,6 +103,10 @@ func (w *watcher) addRecursive(dir string) (watched, ignored int, err error) {
 			return walkErr
 		}
 		if !d.IsDir() {
+			// Watch relevant files individually so kqueue catches in-place writes.
+			if isRelevantFile(path, w.extensions) {
+				w.addFileWatch(path)
+			}
 			return nil
 		}
 		if w.shouldIgnore(path) {
@@ -113,6 +120,27 @@ func (w *watcher) addRecursive(dir string) (watched, ignored int, err error) {
 		return nil
 	})
 	return watched, ignored, err
+}
+
+// addFileWatch adds an idempotent individual file watch, tracked for later removal.
+func (w *watcher) addFileWatch(path string) {
+	if _, ok := w.watchedFiles[path]; ok {
+		return
+	}
+	if err := w.watcher.Add(path); err != nil {
+		w.logger.Debug("[watcher] failed to add file watch", "path", path, "error", err)
+		return
+	}
+	w.watchedFiles[path] = struct{}{}
+}
+
+// removeFileWatch drops a file watch when its file is removed or renamed away.
+func (w *watcher) removeFileWatch(path string) {
+	if _, ok := w.watchedFiles[path]; !ok {
+		return
+	}
+	w.watcher.Remove(path)
+	delete(w.watchedFiles, path)
 }
 
 func (w *watcher) shouldIgnore(path string) bool {
@@ -235,6 +263,12 @@ func (w *watcher) handleEvent(event fsnotify.Event) {
 			return
 		}
 		if isRelevantFile(event.Name, w.extensions) {
+			if event.Has(fsnotify.Create) {
+				w.addFileWatch(event.Name)
+			}
+			if event.Has(fsnotify.Remove) || event.Has(fsnotify.Rename) {
+				w.removeFileWatch(event.Name)
+			}
 			w.debouncedNotify(filepath.Base(event.Name))
 		}
 	}

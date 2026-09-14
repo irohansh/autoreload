@@ -103,6 +103,16 @@ func TestShouldIgnoreEvent(t *testing.T) {
 	}
 }
 
+func waitForChange(t *testing.T, w *watcher, timeout time.Duration, msg string) {
+	t.Helper()
+	select {
+	case <-w.Changes():
+	case <-time.After(timeout):
+		t.Fatal(msg)
+	}
+}
+
+// TestDebounceBurst covers in-place writes collapsing into one debounced change (the kqueue-regressed case).
 func TestDebounceBurst(t *testing.T) {
 	dir := t.TempDir()
 	fpath := filepath.Join(dir, "x.go")
@@ -118,14 +128,40 @@ func TestDebounceBurst(t *testing.T) {
 	defer w.Close()
 
 	for i := 0; i < 5; i++ {
-		if err := os.WriteFile(fpath, []byte("package main\n"), 0644); err != nil {
+		if err := os.WriteFile(fpath, []byte("package main\n// edit\n"), 0644); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	select {
-	case <-w.Changes():
-	case <-time.After(time.Second):
-		t.Fatal("expected one debounced change within 1s")
+	waitForChange(t, w, 2*time.Second, "expected one debounced change from in-place writes within 2s")
+}
+
+// TestRenameWrite covers the atomic write-temp-then-rename save pattern plus watch re-registration.
+func TestRenameWrite(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main.go")
+	if err := os.WriteFile(target, []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
 	}
+
+	w, err := newWatcher(dir, slog.Default(), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+
+	// Temp name uses an ignored suffix so only the rename onto main.go triggers.
+	tmp := filepath.Join(dir, "main.go.tmp")
+	if err := os.WriteFile(tmp, []byte("package main\n// v2\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(tmp, target); err != nil {
+		t.Fatal(err)
+	}
+	waitForChange(t, w, 2*time.Second, "expected a debounced change from rename-based write within 2s")
+
+	if err := os.WriteFile(target, []byte("package main\n// v3\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	waitForChange(t, w, 2*time.Second, "expected a debounced change from post-rename in-place write within 2s")
 }
