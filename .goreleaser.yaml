@@ -51,3 +51,5 @@ changelog:
 release:
   draft: false
   prerelease: auto
+  # Overwrite existing assets when re-running a release for the same tag.
+  replace_existing_artifacts: true
