@@ -145,12 +145,12 @@ fs.inotify.max_user_watches=65536
 
 ## Testing
 
-Unit and integration tests live in `internal/watcher/watcher_test.go` and `internal/process/process_test.go`.
+Unit and integration tests live in `pkg/autoreload/watcher_test.go` and `pkg/autoreload/process_test.go`.
 
 Run all tests:
 
 ```bash
-go test ./internal/watcher/ ./internal/process/ -v
+go test ./... -race
 ```
 
 Watcher tests cover `isRelevantFile`, `shouldIgnore`, `shouldIgnoreEvent`, and debounce behavior (multiple writes → one change). Process tests cover `Kill()` terminating a subprocess (Unix only; skipped on Windows when using `sleep`).
@@ -160,21 +160,18 @@ Watcher tests cover `isRelevantFile`, `shouldIgnore`, `shouldIgnoreEvent`, and d
 ```
 autoreload/
 ├── cmd/autoreload/
-│   └── main.go           # CLI, flags, config loading, watcher/runner wiring
-├── internal/
-│   ├── config/
-│   │   └── config.go     # YAML config load and default paths
-│   ├── watcher/
-│   │   ├── watcher.go   # fsnotify wrapper, recursive watch, filter, debounce, burst
-│   │   └── watcher_test.go
-│   ├── runner/
-│   │   └── runner.go    # Build/exec orchestration, scheduler, backoff, binary hash
-│   └── process/
-│       ├── process.go   # Process group start/kill, graceful shutdown
-│       └── process_test.go
+│   └── main.go           # CLI, flags, config loading, engine wiring
+├── pkg/autoreload/
+│   ├── engine.go         # Public API: Options, Engine, New/Run/Restart/Close
+│   ├── config.go         # YAML config load and default paths
+│   ├── watcher.go        # fsnotify wrapper, recursive watch, filter, debounce, burst
+│   ├── watcher_test.go
+│   ├── runner.go         # Build/exec orchestration, scheduler, backoff, binary hash
+│   ├── process.go        # Process group start/kill, graceful shutdown
+│   └── process_test.go
 ├── testserver/
-│   ├── main.go          # Demo HTTP server
-│   └── autoreload.yaml   # Example config
+│   ├── main.go           # Demo HTTP server
+│   └── autoreload.yaml    # Example config
 ├── go.mod
 ├── go.sum
 ├── Makefile
