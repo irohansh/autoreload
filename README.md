@@ -125,7 +125,10 @@ Here is the full list of what autoreload supports.
 ## Requirements
 
 - Go 1.21 or later to build.
-- Linux, macOS, or Windows. File watching uses fsnotify; process termination uses process groups on Unix and `taskkill` on Windows.
+
+> **Supported platforms:** Linux and macOS. Windows compiles and runs from source but is not currently built or distributed — `process.go` relies on Unix syscalls.
+
+File watching uses fsnotify; process termination uses process groups on Unix and `taskkill` on Windows.
 
 ## Linux inotify limits
 
